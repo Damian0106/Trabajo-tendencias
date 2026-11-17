@@ -1,0 +1,69 @@
+# docker-compose.yml
+# Levanta todo con:   docker compose up -d --build
+# Lo detiene con:     docker compose down        (los datos quedan en el volumen)
+
+# Nombre fijo del proyecto (si no, Compose usa el nombre de la carpeta)
+name: damian
+
+services:
+
+  # ---------- Base de datos ----------
+  db:
+    image: mariadb:11
+    container_name: damian-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+      MARIADB_DATABASE: registro
+      MARIADB_USER: damian
+      MARIADB_PASSWORD: damian123
+    volumes:
+      - datos:/var/lib/mysql          # los datos viven en el volumen
+    networks:
+      - red
+    # La app solo arranca cuando la BD responde de verdad
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Sin "ports": la BD no se expone fuera de la red
+
+  # ---------- Aplicación Flask ----------
+  web:
+    build: .                          # usa el Dockerfile de esta carpeta
+    image: damian-app
+    container_name: damian-web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"                   # PC:contenedor
+    environment:
+      DB_HOST: db                     # nombre del SERVICIO de la BD
+      DB_USER: damian
+      DB_PASSWORD: damian123
+      DB_NAME: registro
+    networks:
+      - red
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ---------- Panel web para ver la BD (opcional) ----------
+  adminer:
+    image: adminer
+    container_name: damian-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - red
+    depends_on:
+      - db
+
+networks:
+  red:
+    name: damian-red
+
+volumes:
+  datos:
+    name: damian-datos
